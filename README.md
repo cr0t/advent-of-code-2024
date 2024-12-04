@@ -24,3 +24,9 @@ Input can be found in the similarly-named files.
 - **Input:** every line is a single piece of work, split it line-by-line, then split each line into items and convert them to Integers
 - **Part 1:** express what is `safe?/1` means for a line of numbers (with an "early exit" based on `Enum.reduce_while/3`)
 - **Part 2:** re-use the same `safe?/1` from the first part, but make all possible inputs one step before and select those that safe
+
+[day03.livemd](day03.livemd)
+
+- **Input:** use Regex to scan the input for the instructions and arguments (they all have well-defined format)
+- **Part 1:** reduce the list of instructions, considering only `mul(x, y)` ones
+- **Part 2:** the similar reduce but with more rules (expressed as multiple clauses of the reducer-function)
