@@ -30,3 +30,11 @@ Input can be found in the similarly-named files.
 - **Input:** use Regex to scan the input for the instructions and arguments (they all have well-defined format)
 - **Part 1:** reduce the list of instructions, considering only `mul(x, y)` ones
 - **Part 2:** the similar reduce but with more rules (expressed as multiple clauses of the reducer-function)
+
+[day04.livemd](day04.livemd)
+
+- **Input:** convert the input to a Map with keys as {x, y} coordinates pointing to values (what's on the given field)
+- **Part 1:** find all starting points for the `X` char, then (using starting points) build lists of coordinates for possible positions of XMAS letters on the board; using these coordingate, get real values from the map, and compare if we get an 'X', 'M', 'A', 'S' then (if so, add 1 to the hits sum)
+- **Part 2:** similar to day 1, but build X-shaped coords for each 'A' starting point (as middle one), collect letters and compare that both diagonals are 'MAS' (or 'SAM'), count only those that fully match the pattern
+
+> Visually, it might be represented as sitting next to a board, and applying some form to it (XMAS, or X-shaped MAS) to each starting point and see what we get. Like playing in a sandbox and "baking" stuff.

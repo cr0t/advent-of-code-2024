@@ -1,0 +1,199 @@
+# Day 4: Ceres Search
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day4Shared do
+  def parse(input) do
+    input
+    |> Kino.Input.read()
+    |> String.split("\n")
+    |> Enum.with_index()
+    |> Enum.reduce(%{}, fn {line, y}, map ->
+      line
+      |> String.codepoints()
+      |> Enum.with_index()
+      |> Enum.reduce(map, fn {char, x}, map ->
+        map
+        |> Map.put({x, y}, char)
+        |> Map.update(:max_x, x, &max(&1, x))
+        |> Map.update(:max_y, y, &max(&1, y))
+      end)
+    end)
+  end
+end
+
+Day4Shared.parse(input)
+```
+
+## Part 1
+
+"Looks like the Chief's not here. Next!" One of The Historians pulls out a device and pushes the only button on it. After a brief flash, you recognize the interior of the [Ceres monitoring station](https://adventofcode.com/2019/day/10)!
+
+As the search for the Chief continues, a small Elf who lives on the station tugs on your shirt; she'd like to know if you could help her with her **word search** (your puzzle input). She only has to find one word: `XMAS`.
+
+This word search allows words to be horizontal, vertical, diagonal, written backwards, or even overlapping other words. It's a little unusual, though, as you don't merely need to find one instance of `XMAS` - you need to find **all of them**. Here are a few ways `XMAS` might appear, where irrelevant characters have been replaced with `.`:
+
+```
+..X...
+.SAMX.
+.A..A.
+XMAS.S
+.X....
+```
+
+The actual word search will be full of letters instead. For example:
+
+```
+MMMSXXMASM
+MSAMXMSMSA
+AMXSXMAAMM
+MSAMASMSMX
+XMASAMXAMM
+XXAMMXXAMA
+SMSMSASXSS
+SAXAMASAAA
+MAMMMXMMMM
+MXMXAXMASX
+```
+
+In this word search, `XMAS` occurs a total of `18` times; here's the same word search again, but where letters not involved in any `XMAS` have been replaced with `.`:
+
+```
+....XXMAS.
+.SAMXMS...
+...S..A...
+..A.A.MS.X
+XMASAMX.MM
+X.....XA.A
+S.S.S.S.SS
+.A.A.A.A.A
+..M.M.M.MM
+.X.X.XMASX
+```
+
+Take a look at the little Elf's word search. **How many times does `XMAS` appear?**
+
+```elixir
+defmodule Day4Part1 do
+  def process(map) do
+    # find all possible starts for an XMAS
+    map
+    |> Enum.reduce([], fn
+      {coord, "X"}, coords -> [coord | coords]
+      _, coords -> coords
+    end)
+    |> Enum.map(fn starting_coord ->
+      starting_coord
+      |> directions()
+      |> Enum.reduce(0, fn [x, m, a, s], acc ->
+        possibly_xmas = [Map.get(map, x), Map.get(map, m), Map.get(map, a), Map.get(map, s)]
+
+        if possibly_xmas == ["X", "M", "A", "S"] do
+          acc + 1
+        else
+          acc
+        end
+      end)
+    end)
+    |> Enum.sum()
+  end
+
+  # make a list of possible directions using initial coordinates:
+  # horizontal, vertical, diagonal
+  def directions({x, y}) do
+    [
+      [{x, y}, {x, y - 1}, {x, y - 2}, {x, y - 3}],
+      [{x, y}, {x + 1, y - 1}, {x + 2, y - 2}, {x + 3, y - 3}],
+      [{x, y}, {x + 1, y}, {x + 2, y}, {x + 3, y}],
+      [{x, y}, {x + 1, y + 1}, {x + 2, y + 2}, {x + 3, y + 3}],
+      [{x, y}, {x, y + 1}, {x, y + 2}, {x, y + 3}],
+      [{x, y}, {x - 1, y + 1}, {x - 2, y + 2}, {x - 3, y + 3}],
+      [{x, y}, {x - 1, y}, {x - 2, y}, {x - 3, y}],
+      [{x, y}, {x - 1, y - 1}, {x - 2, y - 2}, {x - 3, y - 3}]
+    ]
+  end
+end
+
+input |> Day4Shared.parse() |> Day4Part1.process()
+
+# 2573 is the right answer
+```
+
+## Part 2
+
+The Elf looks quizzically at you. Did you misunderstand the assignment?
+
+Looking for the instructions, you flip over the word search to find that this isn't actually an `XMAS` puzzle; it's an `X-MAS` puzzle in which you're supposed to find two `MAS` in the shape of an `X`. One way to achieve that is like this:
+
+```
+M.S
+.A.
+M.S
+```
+
+Irrelevant characters have again been replaced with `.` in the above diagram. Within the `X`, each `MAS` can be written forwards or backwards.
+
+Here's the same example from before, but this time all of the `X-MAS`es have been kept instead:
+
+```
+.M.S......
+..A..MSMS.
+.M.S.MAA..
+..A.ASMSM.
+.M.S.M....
+..........
+S.S.S.S.S.
+.A.A.A.A..
+M.M.M.M.M.
+..........
+```
+
+In this example, an `X-MAS` appears `9` times.
+
+Flip the word search from the instructions back over to the word search side and try again. **How many times does an X-MAS appear?**
+
+```elixir
+defmodule Day4Part2 do
+  def process(map) do
+    map
+    |> Enum.reduce([], fn
+      {coord, "A"}, coords -> [coord | coords]
+      _, coords -> coords
+    end)
+    |> Enum.map(fn starting_coord ->
+      starting_coord
+      |> directions()
+      |> Enum.map(fn [m, a, s] ->
+        possible_mas = [Map.get(map, m), Map.get(map, a), Map.get(map, s)]
+        possible_mas == ["M", "A", "S"] or possible_mas == ["S", "A", "M"]
+      end)
+    end)
+    |> Enum.filter(&(&1 == [true, true, true, true]))
+    |> Enum.count()
+  end
+
+  def directions({x, y}) do
+    [
+      [{x - 1, y - 1}, {x, y}, {x + 1, y + 1}],
+      [{x + 1, y - 1}, {x, y}, {x - 1, y + 1}],
+      [{x + 1, y + 1}, {x, y}, {x - 1, y - 1}],
+      [{x - 1, y + 1}, {x, y}, {x + 1, y - 1}]
+    ]
+  end
+end
+
+input |> Day4Shared.parse() |> Day4Part2.process()
+
+# 1850 is the right answer
+```
