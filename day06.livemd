@@ -1,0 +1,386 @@
+# Day 6: Guard Gallivant
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day6Shared do
+  def parse(input) do
+    input
+    |> Kino.Input.read()
+    |> String.split("\n")
+    |> Enum.with_index()
+    |> Enum.reduce(%{}, fn {line, y}, map ->
+      line
+      |> String.codepoints()
+      |> Enum.with_index()
+      |> Enum.reduce(map, fn {char, x}, map ->
+        map
+        |> Map.put({x, y}, char)
+        |> Map.update(:max_x, x, &max(&1, x))
+        |> Map.update(:max_y, y, &max(&1, y))
+      end)
+    end)
+  end
+
+  def find_start(map), do: Enum.find(map, fn {_, field} -> field == "^" end) |> elem(0)
+
+  def walk(map, start_pos, :up), do: {do_walk(map, start_pos, :y, :up), :right}
+  def walk(map, start_pos, :right), do: {do_walk(map, start_pos, :x, :right), :down}
+  def walk(map, start_pos, :down), do: {do_walk(map, start_pos, :y, :down), :left}
+  def walk(map, start_pos, :left), do: {do_walk(map, start_pos, :x, :left), :up}
+
+  def do_walk(map, {sx, sy}, axis, dir) do
+    %{max_x: max_x, max_y: max_y} = map
+
+    from_to =
+      cond do
+        axis == :y && dir == :up -> sy..0
+        axis == :x && dir == :right -> sx..max_x
+        axis == :y && dir == :down -> sy..max_y
+        axis == :x && dir == :left -> sx..0
+      end
+
+    Enum.reduce_while(from_to, %{}, fn pos, visited ->
+      field = if axis == :x, do: {pos, sy}, else: {sx, pos}
+
+      new_visited =
+        visited
+        |> Map.update(dir, [field], &([field | &1]))
+        |> Map.put(:last_pos, field)
+
+      cond do
+        Map.get(map, field) == "#" -> {:halt, {:stop, visited}}
+        axis == :y && dir == :up && pos == 0 -> {:halt, {:edge, new_visited}}
+        axis == :x && dir == :right && pos == max_x -> {:halt, {:edge, new_visited}}
+        axis == :y && dir == :down && pos == max_y -> {:halt, {:edge, new_visited}}
+        axis == :x && dir == :left && pos == 0 -> {:halt, {:edge, new_visited}}
+        true -> {:cont, new_visited}
+      end
+    end)
+  end
+end
+
+# input
+# |> Day6Shared.parse()
+# |> Day6Shared.walk({4, 6}, :up)
+```
+
+## Part 1
+
+The Historians use their fancy [device](https://adventofcode.com/2024/day/4) again, this time to whisk you all away to the North Pole prototype suit manufacturing lab... in the year [1518](https://adventofcode.com/2018/day/5)! It turns out that having direct access to history is very convenient for a group of historians.
+
+You still have to be careful of time paradoxes, and so it will be important to avoid anyone from 1518 while The Historians search for the Chief. Unfortunately, a single **guard** is patrolling this part of the lab.
+
+Maybe you can work out where the guard will go ahead of time so that The Historians can search safely?
+
+You start by making a map (your puzzle input) of the situation. For example:
+
+```
+....#.....
+.........#
+..........
+..#.......
+.......#..
+..........
+.#..^.....
+........#.
+#.........
+......#...
+```
+
+The map shows the current position of the guard with `^` (to indicate the guard is currently facing **up** from the perspective of the map). Any **obstructions** - crates, desks, alchemical reactors, etc. - are shown as `#`.
+
+Lab guards in 1518 follow a very strict patrol protocol which involves repeatedly following these steps:
+
+* If there is something directly in front of you, turn right 90 degrees.
+* Otherwise, take a step forward.
+
+Following the above protocol, the guard moves up several times until she reaches an obstacle (in this case, a pile of failed suit prototypes):
+
+```
+....#.....
+....^....#
+..........
+..#.......
+.......#..
+..........
+.#........
+........#.
+#.........
+......#...
+```
+
+Because there is now an obstacle in front of the guard, she turns right before continuing straight in her new facing direction:
+
+```
+....#.....
+........>#
+..........
+..#.......
+.......#..
+..........
+.#........
+........#.
+#.........
+......#...
+```
+
+Reaching another obstacle (a spool of several **very** long polymers), she turns right again and continues downward:
+
+```
+....#.....
+.........#
+..........
+..#.......
+.......#..
+..........
+.#......v.
+........#.
+#.........
+......#...
+```
+
+This process continues for a while, but the guard eventually leaves the mapped area (after walking past a tank of universal solvent):
+
+```
+....#.....
+.........#
+..........
+..#.......
+.......#..
+..........
+.#........
+........#.
+#.........
+......#v..
+
+```
+
+By predicting the guard's route, you can determine which specific positions in the lab will be in the patrol path. **Including the guard's starting position**, the positions visited by the guard before leaving the area are marked with an `X`:
+
+```
+....#.....
+....XXXXX#
+....X...X.
+..#.X...X.
+..XXXXX#X.
+..X.X.X.X.
+.#XXXXXXX.
+.XXXXXXX#.
+#XXXXXXX..
+......#X..
+```
+
+In this example, the guard will visit `41` distinct positions on your map.
+
+Predict the path of the guard. **How many distinct positions will the guard visit before leaving the mapped area?**
+
+```elixir
+defmodule Day6Part1 do
+  def process(map) do
+    start_pos = Day6Shared.find_start(map)
+
+    map
+    |> track({{:stop, %{last_pos: start_pos}}, :up}, %{}, 0)
+    |> Enum.filter(fn {k, _} -> k in ~w(up right down left)a end)
+    |> Enum.map(&elem(&1, 1))
+    |> List.flatten()
+    |> Enum.uniq()
+    |> Enum.count()
+  end
+
+  def track(_, _, _, 256), do: raise "Too many turns..."
+
+  def track(map, {{:stop, %{last_pos: start_pos}}, direction}, all_visited, step_n) do
+    {{_, visited}, _} = path = Day6Shared.walk(map, start_pos, direction)
+
+    new_all_visited =
+      Map.merge(visited, all_visited, fn
+        :last_pos, _v1, v2 -> v2
+        _k, v1, v2 -> v1 ++ v2
+      end)
+
+    case path do
+      {{:edge, _}, _} -> new_all_visited
+      {{:stop, _}, _} = next -> track(map, next, new_all_visited, step_n + 1)
+    end
+  end
+end
+
+input |> Day6Shared.parse() |> Day6Part1.process()
+
+# 4819 is the right answer
+```
+
+## Part 2
+
+While The Historians begin working around the guard's patrol route, you borrow their fancy device and step outside the lab. From the safety of a supply closet, you time travel through the last few months and [record](https://adventofcode.com/2018/day/4) the nightly status of the lab's guard post on the walls of the closet.
+
+Returning after what seems like only a few seconds to The Historians, they explain that the guard's patrol area is simply too large for them to safely search the lab without getting caught.
+
+Fortunately, they are **pretty sure** that adding a single new obstruction **won't** cause a time paradox. They'd like to place the new obstruction in such a way that the guard will get **stuck in a loop**, making the rest of the lab safe to search.
+
+To have the lowest chance of creating a time paradox, The Historians would like to know **all** of the possible positions for such an obstruction. The new obstruction can't be placed at the guard's starting position - the guard is there right now and would notice.
+
+In the above example, there are only `6` different positions where a new obstruction would cause the guard to get stuck in a loop. The diagrams of these six situations use `O` to mark the new obstruction, `|` to show a position where the guard moves up/down, `-` to show a position where the guard moves left/right, and `+` to show a position where the guard moves both up/down and left/right.
+
+Option one, put a printing press next to the guard's starting position:
+
+```
+....#.....
+....+---+#
+....|...|.
+..#.|...|.
+....|..#|.
+....|...|.
+.#.O^---+.
+........#.
+#.........
+......#...
+```
+
+Option two, put a stack of failed suit prototypes in the bottom right quadrant of the mapped area:
+
+```
+....#.....
+....+---+#
+....|...|.
+..#.|...|.
+..+-+-+#|.
+..|.|.|.|.
+.#+-^-+-+.
+......O.#.
+#.........
+......#...
+```
+
+Option three, put a crate of chimney-squeeze prototype fabric next to the standing desk in the bottom right quadrant:
+
+```
+....#.....
+....+---+#
+....|...|.
+..#.|...|.
+..+-+-+#|.
+..|.|.|.|.
+.#+-^-+-+.
+.+----+O#.
+#+----+...
+......#...
+```
+
+Option four, put an alchemical retroencabulator near the bottom left corner:
+
+```
+....#.....
+....+---+#
+....|...|.
+..#.|...|.
+..+-+-+#|.
+..|.|.|.|.
+.#+-^-+-+.
+..|...|.#.
+#O+---+...
+......#...
+```
+
+Option five, put the alchemical retroencabulator a bit to the right instead:
+
+```
+....#.....
+....+---+#
+....|...|.
+..#.|...|.
+..+-+-+#|.
+..|.|.|.|.
+.#+-^-+-+.
+....|.|.#.
+#..O+-+...
+......#...
+```
+
+Option six, put a tank of sovereign glue right next to the tank of universal solvent:
+
+```
+....#.....
+....+---+#
+....|...|.
+..#.|...|.
+..+-+-+#|.
+..|.|.|.|.
+.#+-^-+-+.
+.+----++#.
+#+----++..
+......#O..
+```
+
+It doesn't really matter what you choose to use as an obstacle so long as you and The Historians can put it into position without the guard noticing. The important thing is having enough options that you can find one that minimizes time paradoxes, and in this example, there are `6` different positions you could choose.
+
+You need to get the guard stuck in a loop by adding a single new obstruction. **How many different positions could you choose for this obstruction?**
+
+```elixir
+defmodule Day6Part2 do
+  def process(map) do
+    start_pos = Day6Shared.find_start(map)
+
+    # optimization: use only the original path of to put obstacles on...
+    # why we we should place obstacles only in the original? not really sure, but it
+    # help to run the solution 3x times faster (3 seconds vs. 9 seconds if we try to 
+    # put obstacles in any "." field and calculate possible loops)
+    possible_obstacles_coords =
+      map
+      |> Day6Part1.track({{:stop, %{last_pos: start_pos}}, :up}, %{}, 0)
+      |> Enum.filter(fn {k, _} -> k in ~w(up right down left)a end)
+      |> Enum.map(&elem(&1, 1))
+      |> List.flatten()
+      |> Enum.uniq()
+      |> Kernel.--([start_pos])
+    
+    possible_obstacles_coords
+    |> Task.async_stream(fn obstacle_pos ->
+      map
+      |> Map.put(obstacle_pos, "#")
+      |> track2({{:stop, %{last_pos: start_pos}}, :up}, %{}, 0)
+    end)
+    |> Enum.filter(&(elem(&1, 1) == :loop))
+    |> Enum.count()
+  end
+
+  def track2(_, _, _, 256), do: raise("Too many turns...")
+
+  def track2(map, {{:stop, %{last_pos: start_pos}}, direction}, all_visited, step_n) do
+    {{_, visited}, dir} = path = Day6Shared.walk(map, start_pos, direction)
+
+    new_all_visited =
+      Map.merge(visited, all_visited, fn
+        :last_pos, _v1, v2 -> v2
+        _k, v1, v2 -> v1 ++ v2
+      end)
+
+    if in_loop?(new_all_visited, dir, visited[:last_pos]) do
+      :loop
+    else
+      case path do
+        {{:edge, _}, _} -> :edge
+        {{:stop, _}, _} = next -> track2(map, next, new_all_visited, step_n + 1)
+      end
+    end
+  end
+
+  defp in_loop?(visited, direction, field), do: field in Map.get(visited, direction, [])
+end
+
+input |> Day6Shared.parse() |> Day6Part2.process()
+
+# 1796 is the right answer, first attempt took ~10 seconds
+```

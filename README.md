@@ -44,3 +44,9 @@ Input can be found in the similarly-named files.
 - **Input:** input has two sections: rules and updates; rules better to save as Map, while updates is just a list of lists of integers; we also define a couple of helpers - `correct/2` and `sum_middles/1` which we use later
 - **Part 1:** filter all correct items, sum their middles...
 - **Part 2:** reject all correct items and fix incorrect ones; to fix them, we calculate a "weight" of each item in the list – we take item's rules, and compare to siblings - more siblings in the rules, more weight; later we just order by weight; and, eventually, sum the middles of the fixed updates
+
+[day06.livemd](day06.livemd)
+
+- **Input:** it's a simple 2D map, convert it to a Map with keys-coords pointing to actual value of the field it represents; in addition max_x and max_y included; we also define helpers to "move" into some direction from a stating position and detecting if we hit an obstacle in the process, or went into edge - we return visited coordinates, including some meta data (where to turn next, for example)
+- **Part 1:** find starting position, feed it to the `track/4z` function that collects all the visited coordinates until we approach an "edge"; then we flatten, find unique fields and count them
+- **Part 2:** use original path to put random obstacles on (not sure why it works, but it is! and it works ~3x times faster in comparison to check EVERY "." field for possible loops); then take every possible new obstacle and check if we in a loop or not; for that we have changed the original data structure to check if we are in the same coordinate and same direction easier (there is a Map with keys-directions and values - list of visited previously fields having the same direction).
