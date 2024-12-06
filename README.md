@@ -38,3 +38,9 @@ Input can be found in the similarly-named files.
 - **Part 2:** similar to day 1, but build X-shaped coords for each 'A' starting point (as middle one), collect letters and compare that both diagonals are 'MAS' (or 'SAM'), count only those that fully match the pattern
 
 > Visually, it might be represented as sitting next to a board, and applying some form to it (XMAS, or X-shaped MAS) to each starting point and see what we get. Like playing in a sandbox and "baking" stuff.
+
+[day05.livemd](day05.livemd)
+
+- **Input:** input has two sections: rules and updates; rules better to save as Map, while updates is just a list of lists of integers; we also define a couple of helpers - `correct/2` and `sum_middles/1` which we use later
+- **Part 1:** filter all correct items, sum their middles...
+- **Part 2:** reject all correct items and fix incorrect ones; to fix them, we calculate a "weight" of each item in the list – we take item's rules, and compare to siblings - more siblings in the rules, more weight; later we just order by weight; and, eventually, sum the middles of the fixed updates
