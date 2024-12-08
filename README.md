@@ -56,3 +56,9 @@ Input can be found in the similarly-named files.
 - **Input:** Regex helps to find all the numbers in the lines; due to format, the very first number in each "equation" is its result, the rest – operands; in addition to parsing, we also place combinations generator which takes a list of possible values and a expecting length and generates combinations of that length with all positions of values
 - **Part 1:** filter equations with the function that (1) generates all possible combinations of operators, (2) "inserts" them between the operands, (3) does the equation, and (4) compares to the result; then find the sum of results
 - **Part 2:** do basically everything as in the 1st part, but (due to the amount of possible combinations increase) parallelize it with Task.async_stream; also use Stream.map on combinations to reduce number of eventual computations
+
+[day08.livemd](day08.livemd)
+
+- **Input:** input is find to represent as map (with max_x, and max_y)
+- **Part 1:** find all antennas positions and group them by their "frequency" (label), find all the unique pairs of these antennas and then calculate list of antinodes' coordinates (using Pythagorean theorem we can determine deltas of x and y, and find opposite points on the grid; points' coordinates depend on the mutual position of first and second antennas); we filter only those coordinates that are in the map; moreover, due to antinodes can take the same coordinate, we have to find unique only, and count them
+- **Part 2:** we do similar thing as in the 1st part, but now we find not just 2 antinode coordinates for each antennas pair, we find ALL the antinodes in each direction, starting from antenna's point and until we reach the edge of the map; the antennas coordinates are also added to the list of antinodes; the rest is similar - uniq, count

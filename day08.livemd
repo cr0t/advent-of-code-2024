@@ -1,0 +1,195 @@
+# Day 8: Resonant Collinearity
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day8Shared do
+  def parse(input) do
+    input
+    |> Kino.Input.read()
+    |> String.split("\n")
+    |> Enum.with_index()
+    |> Enum.reduce(%{}, fn {line, y}, map ->
+      line
+      |> String.codepoints()
+      |> Enum.with_index()
+      |> Enum.reduce(map, fn {char, x}, map ->
+        map
+        |> Map.put({x, y}, char)
+        |> Map.update(:max_x, x, &max(&1, x))
+        |> Map.update(:max_y, y, &max(&1, y))
+      end)
+    end)
+  end
+
+  # Generates list of unique pairs for the given input. Example:
+  #
+  # - for input `[:a, :b, :c]`
+  # - we will get [[:a, :b], [:a, :c], [:b, :c]] (and skip like [:c, :a] or [:c, :b])
+  def unique_pairs(coords) do
+    for i <- 0..(length(coords) - 2),
+        j <- (i + 1)..(length(coords) - 1) do
+      {Enum.at(coords, i), Enum.at(coords, j)}
+    end
+  end
+end
+
+# Day8Shared.parse(input)
+```
+
+## Part 1
+
+```elixir
+defmodule Day8Part1 do
+  def process(%{max_x: max_x, max_y: max_y} = map) do
+    antennas =
+      map
+      |> Enum.filter(&(is_binary(elem(&1, 1)) && elem(&1, 1) != "."))
+      |> Enum.group_by(&elem(&1, 1), &elem(&1, 0))
+
+    Enum.map(antennas, fn {_label, coords} ->
+      coords
+      |> Day8Shared.unique_pairs()
+      |> Enum.map(&antinodes/1)
+    end)
+    |> List.flatten()
+    |> Enum.reject(fn {x, y} -> x < 0 or x > max_x or y < 0 or y > max_y end)
+    |> Enum.uniq()
+    |> Enum.count()
+  end
+
+  def antinodes({{x1, y1}, {x2, y2}}) do
+    {xd, yd} = {abs(x1 - x2), abs(y1 - y2)}
+
+    cond do
+      x1 >= x2 and y1 >= y2 -> [{x1 + xd, y1 + yd}, {x2 - xd, y2 - yd}]
+      x1 >= x2 and y1 <= y2 -> [{x1 + xd, y1 - yd}, {x2 - xd, y2 + yd}]
+      x1 <= x2 and y1 <= y2 -> [{x1 - xd, y1 - yd}, {x2 + xd, y2 + yd}]
+      x1 <= x2 and y1 >= y2 -> [{x1 - xd, y1 + yd}, {x2 + xd, y2 - yd}]
+    end
+  end
+end
+
+input |> Day8Shared.parse() |> Day8Part1.process()
+
+# 285 is the right answer
+```
+
+## Part 2
+
+```elixir
+defmodule Day8Part2 do
+  def process(%{max_x: max_x, max_y: max_y} = map) do
+    antennas =
+      map
+      |> Enum.filter(&(is_binary(elem(&1, 1)) && elem(&1, 1) != "."))
+      |> Enum.group_by(&elem(&1, 1), &elem(&1, 0))
+
+    Enum.map(antennas, fn {_label, coords} ->
+      coords
+      |> Day8Shared.unique_pairs()
+      |> Enum.map(&antinodes(&1, max_x, max_y))
+    end)
+    |> List.flatten()
+    |> Enum.uniq()
+    |> Enum.count()
+  end
+
+  def antinodes({{x1, y1}, {x2, y2}}, max_x, max_y) do
+    deltas = {abs(x1 - x2), abs(y1 - y2)}
+
+    cond do
+      x1 >= x2 and y1 >= y2 ->
+        [
+          [{x1, y1}, {x2, y2}],
+          all_to_bottom_right({x1, y1}, deltas, max_x, max_y, []),
+          all_to_top_left({x2, y2}, deltas, [])
+        ]
+
+      x1 >= x2 and y1 <= y2 ->
+        [
+          [{x1, y1}, {x2, y2}],
+          all_to_top_right({x1, y1}, deltas, max_x, []),
+          all_to_bottom_left({x2, y2}, deltas, max_y, [])
+        ]
+
+      x1 <= x2 and y1 <= y2 ->
+        [
+          [{x1, y1}, {x2, y2}],
+          all_to_top_left({x1, y1}, deltas, []),
+          all_to_bottom_right({x2, y2}, deltas, max_x, max_y, [])
+        ]
+
+      x1 <= x2 and y1 >= y2 ->
+        [
+          [{x1, y1}, {x2, y2}],
+          all_to_bottom_left({x1, y1}, deltas, max_y, []),
+          all_to_top_right({x2, y2}, deltas, max_x, [])
+        ]
+    end
+  end
+
+  def all_to_top_right(start_pos, deltas, max_x, acc) do
+    {x, y} = next = to_top_right(start_pos, deltas)
+
+    if x > max_x or y < 0 do
+      acc
+    else
+      all_to_top_right(next, deltas, max_x, [next | acc])
+    end
+  end
+
+  def all_to_top_left(start_pos, deltas, acc) do
+    {x, y} = next = to_top_left(start_pos, deltas)
+
+    if x < 0 or y < 0 do
+      acc
+    else
+      all_to_top_left(next, deltas, [next | acc])
+    end
+  end
+
+  def all_to_bottom_right(start_pos, deltas, max_x, max_y, acc) do
+    {x, y} = next = to_bottom_right(start_pos, deltas)
+
+    if x > max_x or y > max_y do
+      acc
+    else
+      all_to_bottom_right(next, deltas, max_x, max_y, [next | acc])
+    end
+  end
+
+  def all_to_bottom_left(start_pos, deltas, max_y, acc) do
+    {x, y} = next = to_bottom_left(start_pos, deltas)
+
+    if x < 0 or y > max_y do
+      acc
+    else
+      all_to_bottom_left(next, deltas, max_y, [next | acc])
+    end
+  end
+
+  # Santa's Little Helpers
+
+  defp to_top_right({x, y}, {xd, yd}), do: {x + xd, y - yd}
+  defp to_top_left({x, y}, {xd, yd}), do: {x - xd, y - yd}
+  defp to_bottom_right({x, y}, {xd, yd}), do: {x + xd, y + yd}
+  defp to_bottom_left({x, y}, {xd, yd}), do: {x - xd, y + yd}
+end
+
+input
+|> Day8Shared.parse()
+|> Day8Part2.process()
+
+# 944 is the right answer
+```
