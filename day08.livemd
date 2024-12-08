@@ -69,14 +69,10 @@ defmodule Day8Part1 do
   end
 
   def antinodes({{x1, y1}, {x2, y2}}) do
-    {xd, yd} = {abs(x1 - x2), abs(y1 - y2)}
-
-    cond do
-      x1 >= x2 and y1 >= y2 -> [{x1 + xd, y1 + yd}, {x2 - xd, y2 - yd}]
-      x1 >= x2 and y1 <= y2 -> [{x1 + xd, y1 - yd}, {x2 - xd, y2 + yd}]
-      x1 <= x2 and y1 <= y2 -> [{x1 - xd, y1 - yd}, {x2 + xd, y2 + yd}]
-      x1 <= x2 and y1 >= y2 -> [{x1 - xd, y1 + yd}, {x2 + xd, y2 - yd}]
-    end
+    [
+      {x2 + (x2 - x1), y2 + (y2 - y1)},
+      {x1 - (x2 - x1), y1 - (y2 - y1)}
+    ]
   end
 end
 
@@ -106,90 +102,32 @@ defmodule Day8Part2 do
   end
 
   def antinodes({{x1, y1}, {x2, y2}}, max_x, max_y) do
-    deltas = {abs(x1 - x2), abs(y1 - y2)}
+    delta_x = x2 - x1
+    delta_y = y2 - y1
 
-    cond do
-      x1 >= x2 and y1 >= y2 ->
-        [
-          [{x1, y1}, {x2, y2}],
-          all_to_bottom_right({x1, y1}, deltas, max_x, max_y, []),
-          all_to_top_left({x2, y2}, deltas, [])
-        ]
-
-      x1 >= x2 and y1 <= y2 ->
-        [
-          [{x1, y1}, {x2, y2}],
-          all_to_top_right({x1, y1}, deltas, max_x, []),
-          all_to_bottom_left({x2, y2}, deltas, max_y, [])
-        ]
-
-      x1 <= x2 and y1 <= y2 ->
-        [
-          [{x1, y1}, {x2, y2}],
-          all_to_top_left({x1, y1}, deltas, []),
-          all_to_bottom_right({x2, y2}, deltas, max_x, max_y, [])
-        ]
-
-      x1 <= x2 and y1 >= y2 ->
-        [
-          [{x1, y1}, {x2, y2}],
-          all_to_bottom_left({x1, y1}, deltas, max_y, []),
-          all_to_top_right({x2, y2}, deltas, max_x, [])
-        ]
-    end
+    [
+      all_nodes({x1, y1}, :dec, delta_x, delta_y, max_x, max_y, 0, []),
+      all_nodes({x2, y2}, :inc, delta_x, delta_y, max_x, max_y, 0, [])
+    ]
   end
 
-  def all_to_top_right(start_pos, deltas, max_x, acc) do
-    {x, y} = next = to_top_right(start_pos, deltas)
+  def all_nodes({x, y}, op, delta_x, delta_y, max_x, max_y, distance_n, nodes) do
+    {new_x, new_y} =
+      new_node =
+      case op do
+        :inc -> {x + delta_x * distance_n, y + delta_y * distance_n}
+        :dec -> {x - delta_x * distance_n, y - delta_y * distance_n}
+      end
 
-    if x > max_x or y < 0 do
-      acc
+    if new_x < 0 or new_x > max_x or new_y < 0 or new_y > max_y do
+      nodes
     else
-      all_to_top_right(next, deltas, max_x, [next | acc])
+      all_nodes({x, y}, op, delta_x, delta_y, max_x, max_y, distance_n + 1, [new_node | nodes])
     end
   end
-
-  def all_to_top_left(start_pos, deltas, acc) do
-    {x, y} = next = to_top_left(start_pos, deltas)
-
-    if x < 0 or y < 0 do
-      acc
-    else
-      all_to_top_left(next, deltas, [next | acc])
-    end
-  end
-
-  def all_to_bottom_right(start_pos, deltas, max_x, max_y, acc) do
-    {x, y} = next = to_bottom_right(start_pos, deltas)
-
-    if x > max_x or y > max_y do
-      acc
-    else
-      all_to_bottom_right(next, deltas, max_x, max_y, [next | acc])
-    end
-  end
-
-  def all_to_bottom_left(start_pos, deltas, max_y, acc) do
-    {x, y} = next = to_bottom_left(start_pos, deltas)
-
-    if x < 0 or y > max_y do
-      acc
-    else
-      all_to_bottom_left(next, deltas, max_y, [next | acc])
-    end
-  end
-
-  # Santa's Little Helpers
-
-  defp to_top_right({x, y}, {xd, yd}), do: {x + xd, y - yd}
-  defp to_top_left({x, y}, {xd, yd}), do: {x - xd, y - yd}
-  defp to_bottom_right({x, y}, {xd, yd}), do: {x + xd, y + yd}
-  defp to_bottom_left({x, y}, {xd, yd}), do: {x - xd, y + yd}
 end
 
-input
-|> Day8Shared.parse()
-|> Day8Part2.process()
+input |> Day8Shared.parse() |> Day8Part2.process()
 
 # 944 is the right answer
 ```
