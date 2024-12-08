@@ -191,7 +191,7 @@ defmodule Day6Part1 do
     start_pos = Day6Shared.find_start(map)
 
     map
-    |> track({{:stop, %{last_pos: start_pos}}, :up}, %{}, 0)
+    |> track({{:stop, %{last_pos: start_pos}}, :up}, %{})
     |> Enum.filter(fn {k, _} -> k in ~w(up right down left)a end)
     |> Enum.map(&elem(&1, 1))
     |> List.flatten()
@@ -199,9 +199,10 @@ defmodule Day6Part1 do
     |> Enum.count()
   end
 
-  def track(_, _, _, 256), do: raise "Too many turns..."
+  # can be used as a safety measure, just count steps in the other clause
+  # def track(_, _, _, 256), do: raise("Too many turns...")
 
-  def track(map, {{:stop, %{last_pos: start_pos}}, direction}, all_visited, step_n) do
+  def track(map, {{:stop, %{last_pos: start_pos}}, direction}, all_visited) do
     {{_, visited}, _} = path = Day6Shared.walk(map, start_pos, direction)
 
     new_all_visited =
@@ -212,7 +213,7 @@ defmodule Day6Part1 do
 
     case path do
       {{:edge, _}, _} -> new_all_visited
-      {{:stop, _}, _} = next -> track(map, next, new_all_visited, step_n + 1)
+      {{:stop, _}, _} = next -> track(map, next, new_all_visited)
     end
   end
 end
@@ -333,10 +334,9 @@ defmodule Day6Part2 do
   def process(map) do
     start_pos = Day6Shared.find_start(map)
 
-    # optimization: use only the original path of to put obstacles on...
-    # why we we should place obstacles only in the original? not really sure, but it
-    # help to run the solution 3x times faster (3 seconds vs. 9 seconds if we try to 
-    # put obstacles in any "." field and calculate possible loops)
+    # later optimization: use only the original path to put obstacles on...
+    # this helps to run the solution 3x times faster (3 seconds vs. 9 seconds
+    # if we try to put obstacles in any "." field and calculate possible loops)
     possible_obstacles_coords =
       map
       |> Day6Part1.track({{:stop, %{last_pos: start_pos}}, :up}, %{}, 0)
@@ -345,20 +345,21 @@ defmodule Day6Part2 do
       |> List.flatten()
       |> Enum.uniq()
       |> Kernel.--([start_pos])
-    
+
     possible_obstacles_coords
     |> Task.async_stream(fn obstacle_pos ->
       map
       |> Map.put(obstacle_pos, "#")
-      |> track2({{:stop, %{last_pos: start_pos}}, :up}, %{}, 0)
+      |> track({{:stop, %{last_pos: start_pos}}, :up}, %{})
     end)
     |> Enum.filter(&(elem(&1, 1) == :loop))
     |> Enum.count()
   end
 
-  def track2(_, _, _, 256), do: raise("Too many turns...")
+  # can be used as a safety measure, just count steps in the other clause
+  # def track(_, _, _, 256), do: raise("Too many turns...")
 
-  def track2(map, {{:stop, %{last_pos: start_pos}}, direction}, all_visited, step_n) do
+  def track(map, {{:stop, %{last_pos: start_pos}}, direction}, all_visited) do
     {{_, visited}, dir} = path = Day6Shared.walk(map, start_pos, direction)
 
     new_all_visited =
@@ -372,15 +373,16 @@ defmodule Day6Part2 do
     else
       case path do
         {{:edge, _}, _} -> :edge
-        {{:stop, _}, _} = next -> track2(map, next, new_all_visited, step_n + 1)
+        {{:stop, _}, _} = next -> track(map, next, new_all_visited)
       end
     end
   end
 
-  defp in_loop?(visited, direction, field), do: field in Map.get(visited, direction, [])
+  defp in_loop?(visited, direction, field),
+    do: field in Map.get(visited, direction, [])
 end
 
 input |> Day6Shared.parse() |> Day6Part2.process()
 
-# 1796 is the right answer, first attempt took ~10 seconds
+# 1796 is the right answer, first attempt took ~10 seconds, second ~2.8 seconds
 ```
