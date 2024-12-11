@@ -74,3 +74,9 @@ _Visually, it might be represented as sitting next to a board, and applying some
 - **Input:** As the first step, we have to convert the input into a Map with {x, y} coordinates as keys, and height levels as values. Later, we must convert this map into a graph (which is also presented as a Map) with keys as {x, y} points and possible next moves (which are dependent on the neighbor's level) from this position.
 - **Part 1:** Solved with a slightly modified BFS (Breadth-First Search) algorithm. The modification lets us know whether the target is accessible or not; we are not interested in the path itself.
 - **Part 2:** Solved with DFS (Depth-First Search) which enables us to find ALL possible paths in a graph between two given nodes.
+
+### [Day 11](day11.livemd): Plutonian Pebbles
+
+- **Input:** Simply a list of integer numbers split by whitespace.
+- **Part 1:** This part can be solved in a brute-force way: by reducing a linked list of the stones on each step, just apply the rules to each stone in the list.
+- **Part 2:** This part cannot be solved in a brute-force manner — just too many items in the list… The trick is in the data structure: instead of a list of stones, we shall store them as maps. Basically, a statistic of how many of each stone is there at any moment. Here is an example: `1036288 7 2 20 24 4048 1 4048 8096 28 67 60 32` shall be represented as `%{1 => 1, 2 => 1, 7 => 1, 20 => 1, 24 => 1, 28 => 1, 32 => 1, 60 => 1, 67 => 1, 4048 => 2, 8096 => 1, 1036288 => 1}`. At each step (blink), we apply rules to the map's keys and then convert it to a new statistical map.
