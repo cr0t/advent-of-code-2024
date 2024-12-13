@@ -80,3 +80,10 @@ _Visually, it might be represented as sitting next to a board, and applying some
 - **Input:** Simply a list of integer numbers split by whitespace.
 - **Part 1:** This part can be solved in a brute-force way: by reducing a linked list of the stones on each step, just apply the rules to each stone in the list.
 - **Part 2:** This part cannot be solved in a brute-force manner — just too many items in the list… The trick is in the data structure: instead of a list of stones, we shall store them as maps. Basically, a statistic of how many of each stone is there at any moment. Here is an example: `1036288 7 2 20 24 4048 1 4048 8096 28 67 60 32` shall be represented as `%{1 => 1, 2 => 1, 7 => 1, 20 => 1, 24 => 1, 28 => 1, 32 => 1, 60 => 1, 67 => 1, 4048 => 2, 8096 => 1, 1036288 => 1}`. At each step (blink), we apply rules to the map's keys and then convert it to a new statistical map.
+
+### [Day 12](day12.livemd): Garden Groups
+
+- **Tags: map, graph, BFS, neighbors, perimeter, think-outside-of-the-box**
+- **Input:** Read it as a map, but convert to the graph (of connected nodes by neighboring plant types) right away, as we will use BFS to locate the regions of the plants on this map/graph.
+- **Part 1:** Find all the regions (they will be presented as MapSets) and calculate their perimeters (each item is 4 minus the number of neighbors).
+- **Part 2:** The trick is in "scanning" the region using vertical and horizontal lines and collecting metadata about the plants, then we can use it to calculate the number of consecutive sides. See more details in the comments in the code.
