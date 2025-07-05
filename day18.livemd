@@ -1,0 +1,126 @@
+# Day 18: RAM Run
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"},
+  {:libgraph, "~> 0.16.0"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day18Shared do
+  def parse(input) do
+    input
+    |> Kino.Input.read()
+    |> String.split("\n")
+    |> Enum.map(fn raw ->
+      ~r/(\d+),(\d+)/
+      |> Regex.run(raw, capture: :all_but_first)
+      |> Enum.map(&String.to_integer/1)
+      |> List.to_tuple()
+    end)
+  end
+
+  def build_graph(bytes, after_n_falls, size) do
+    fallen_bytes = fallen_bytes(bytes, after_n_falls) # |> IO.inspect()
+
+    Enum.reduce(0..size, Graph.new(), fn y, graph ->
+      Enum.reduce(0..size, graph, fn x, graph ->
+        if MapSet.member?(fallen_bytes, {x, y}) do
+          graph
+        else
+          {x, y}
+          |> neibs()
+          |> Enum.filter(fn {nx, ny} ->
+            nx >= 0 and ny >= 0 and nx <= size and ny <= size and
+              not MapSet.member?(fallen_bytes, {nx, ny})
+          end)
+          |> Enum.reduce(graph, fn accessible_neib, graph ->
+            Graph.add_edge(graph, {x, y}, accessible_neib)
+          end)
+        end
+      end)
+    end)
+  end
+
+  defp fallen_bytes(bytes, after_n), do: bytes |> Enum.take(after_n) |> MapSet.new()
+
+  defp neibs({x, y}), do: [{x, y - 1}, {x + 1, y}, {x, y + 1}, {x - 1, y}]
+end
+
+Day18Shared.parse(input) |> Day18Shared.build_graph(12, 6)
+```
+
+## Part 1
+
+```elixir
+defmodule Day18Part1 do
+  def process(bytes, after_n_falls, size) do
+    bytes
+    |> Day18Shared.build_graph(after_n_falls, size)
+    |> Graph.Pathfinding.dijkstra({0, 0}, {size, size})
+    |> Enum.count()
+  end
+end
+
+input |> Day18Shared.parse() |> Day18Part1.process(1024, 70)
+
+# 322 is the right answer
+```
+
+## Part 2
+
+```elixir
+defmodule Day18Part2 do
+  def process(bytes, after_n_falls, size) do
+    # dumb(bytes, after_n_falls, size)
+    parallel(bytes, after_n_falls, size)
+  end
+
+  # 17.5 seconds to find an answer
+  def dumb(bytes, after_n_falls, size) do
+    graph = Day18Shared.build_graph(bytes, after_n_falls, size)
+    {_, next_to_fall} = Enum.split(bytes, after_n_falls)
+
+    Enum.reduce_while(next_to_fall, {graph, nil}, fn new_fall, {graph, _blocker} ->
+      new_graph = Graph.delete_vertex(graph, new_fall)
+
+      case Graph.Pathfinding.dijkstra(new_graph, {0, 0}, {size, size}) do
+        nil -> {:halt, new_fall}
+        _ -> {:cont, {new_graph, nil}}
+      end
+    end)
+  end
+
+  # 5.5 seconds to find an answer
+  def parallel(bytes, after_n_falls, size) do
+    {_, next_to_fall} = Enum.split(bytes, after_n_falls)
+
+    {:ok, {:not_found, blocked_at}} =
+      0..Enum.count(next_to_fall)
+      |> Task.async_stream(fn extra_n ->
+        graph = Day18Shared.build_graph(bytes, after_n_falls + extra_n, size)
+
+        case Graph.Pathfinding.dijkstra(graph, {0, 0}, {size, size}) do
+          nil -> {:not_found, after_n_falls + extra_n}
+          _ -> :found
+        end
+      end)
+      |> Stream.filter(fn {:ok, res} -> is_tuple(res) end)
+      |> Enum.to_list()
+      |> hd()
+
+    Enum.at(bytes, blocked_at - 1)
+  end
+end
+
+input |> Day18Shared.parse() |> Day18Part2.process(1024, 70)
+
+# 60,21 is the right answer, 17.5 seconds dumb brute-force, 5.5 seconds – parallel brute-force
+```

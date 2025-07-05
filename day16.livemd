@@ -1,0 +1,230 @@
+# Day 16: Reindeer Maze
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day16Shared do
+  def parse(input) do
+    map =
+      input
+      |> Kino.Input.read()
+      |> String.split("\n")
+      |> Enum.with_index()
+      |> Enum.reduce(%{}, fn {row, y}, map ->
+        row
+        |> String.codepoints()
+        |> Enum.with_index()
+        |> Enum.reduce(map, fn {value, x}, map ->
+          case value do
+            "S" ->
+              map |> Map.put(:start, {x, y}) |> Map.put({x, y}, ".")
+
+            "E" ->
+              map |> Map.put(:finish, {x, y}) |> Map.put({x, y}, ".")
+
+            val ->
+              map
+              |> Map.put({x, y}, val)
+              |> Map.update(:max_x, x, &max(&1, x))
+              |> Map.update(:max_y, y, &max(&1, y))
+          end
+        end)
+      end)
+
+    {map, build_graph(map)}
+  end
+
+  defp build_graph(map) do
+    map
+    |> Enum.filter(&(elem(&1, 1) == "."))
+    |> Enum.reduce(%{}, fn {from, _}, graph ->
+      from
+      |> neibs()
+      |> Enum.filter(fn {neib_pos, _} -> Map.get(map, neib_pos) == "." end)
+      |> Enum.reduce(graph, fn to, graph ->
+        Map.update(graph, from, [to], &[to | &1])
+      end)
+    end)
+  end
+
+  defp neibs({x, y}),
+    do: [{{x, y - 1}, :up}, {{x + 1, y}, :right}, {{x, y + 1}, :down}, {{x - 1, y}, :left}]
+
+  defp neibs(_), do: []
+end
+
+# Day16Shared.parse(input)
+```
+
+```elixir
+defmodule PathFinder do
+  defmodule State do
+    defstruct position: nil, orientation: nil, cost: 0, path: [], path_w_dir: []
+  end
+
+  def least_expensive_path(graph, start, destination, orientation \\ :right) do
+    initial_state = %State{
+      position: start,
+      orientation: orientation,
+      cost: 0,
+      path: [start],
+      path_w_dir: [{start, orientation}]
+    }
+
+    do_find_path(graph, destination, [initial_state], MapSet.new())
+  end
+
+  defp do_find_path(graph, destination, queue, visited) do
+    case queue do
+      [] ->
+        {:error, "No path found"}
+
+      [current | rest] ->
+        cond do
+          current.position == destination ->
+            {:ok, current}
+
+          MapSet.member?(visited, {current.position, current.orientation}) ->
+            do_find_path(graph, destination, rest, visited)
+
+          true ->
+            new_visited = MapSet.put(visited, {current.position, current.orientation})
+
+            new_states =
+              graph
+              |> generate_next_states(current)
+              |> Enum.reject(fn state ->
+                MapSet.member?(new_visited, {state.position, state.orientation})
+              end)
+
+            updated_queue = Enum.sort_by(rest ++ new_states, & &1.cost)
+
+            do_find_path(graph, destination, updated_queue, new_visited)
+        end
+    end
+  end
+
+  defp generate_next_states(graph, current_state) do
+    graph
+    |> Map.get(current_state.position, [])
+    |> Enum.map(fn {neighbor, direction} ->
+      move_cost = if current_state.orientation == direction, do: 1, else: 1001
+
+      %State{
+        position: neighbor,
+        orientation: direction,
+        cost: current_state.cost + move_cost,
+        path: [neighbor | current_state.path],
+        path_w_dir: [{neighbor, direction} | current_state.path_w_dir]
+      }
+    end)
+  end
+end
+```
+
+## Part 1
+
+```elixir
+defmodule Day16Part1 do
+  def process({%{start: start, finish: finish}, graph}) do
+    {:ok, best_path} = PathFinder.least_expensive_path(graph, start, finish)
+
+    best_path.cost
+  end
+end
+
+input |> Day16Shared.parse() |> Day16Part1.process()
+
+# 90460 is the right answer
+```
+
+## Part 2
+
+```elixir
+defmodule Day16Part2 do
+  @doc """
+  The idea is the next:
+  
+  - find the least expensive path (it's just one of a few!)
+  
+  - go over each point of this path (with direction it was visited)
+  
+  - find points that can be used as forks (if they have a neighbor that is not in the
+    original path)
+  
+  - calc the cost of the path from such a point and direction it was visited originally to
+    the finish point
+  
+  - prepare alternatives (by finding neighbors in the graph node, but reject one we went to
+    originally or any other that in the original path)
+  
+  - for each alternative prepare an alternated graph: remove a connection from the original
+    bifurcation point to the next that is in the original path (this is why we track it in
+    the point and prev_point); IT WON'T ALLOW OUR PATHFINDER TO GO TO ORIGINAL PATH!
+  
+  - our pathfinder will have to find a new "least expensive" path in the alternated graph,
+    so we can compare its cost to the original: if they are the same, we can consider this
+    new alternative path
+  
+  - eventually, flatten everything, get paths from all alternatives, and use MapSet to
+    combine it with original path points to find all the tiles covered by best paths
+
+  Phew...
+  """
+  def process({%{start: start, finish: finish}, graph}) do
+    {:ok, best_path} = PathFinder.least_expensive_path(graph, start, finish)
+
+    best_set = MapSet.new(best_path.path)
+
+    best_path.path_w_dir
+    |> Enum.reverse()
+    |> Enum.reduce({[], nil}, fn
+      point, {[], nil} ->
+        {[], point}
+
+      {point, dir}, {paths, {prev_point, prev_dir}} ->
+        {:ok, prevcut} = PathFinder.least_expensive_path(graph, prev_point, finish, prev_dir)
+
+        alts =
+          graph[prev_point]
+          |> Enum.reject(fn {alt, _} -> alt == point or MapSet.member?(best_set, alt) end)
+          |> Enum.map(fn _ ->
+            alt_graph =
+              Map.update(graph, prev_point, [], fn neibs ->
+                Enum.reject(neibs, fn {neib, _} -> neib == point end)
+              end)
+
+            case PathFinder.least_expensive_path(alt_graph, prev_point, finish, prev_dir) do
+              {:ok, alt_path} -> [alt_path]
+              _ -> []
+            end
+          end)
+          |> List.flatten()
+          |> Enum.filter(fn alt_path -> alt_path.cost == prevcut.cost end)
+
+        {[alts | paths], {point, dir}}
+    end)
+    |> elem(0)
+    |> List.flatten()
+    |> Enum.map(&(&1.path))
+    |> List.flatten()
+    |> MapSet.new()
+    |> MapSet.union(best_set)
+    |> MapSet.size()
+  end
+end
+
+input |> Day16Shared.parse() |> Day16Part2.process()
+
+# 575 is the right answer (~25 seconds to compute)
+```

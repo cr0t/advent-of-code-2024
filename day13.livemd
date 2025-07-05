@@ -1,0 +1,185 @@
+# Day 13: Claw Contraption
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day13Shared do
+  def parse(input) do
+    input
+    |> Kino.Input.read()
+    |> String.split("\n\n")
+    |> Enum.map(&parse_machine/1)
+  end
+
+  defp parse_machine(rules) do
+    [a_rules, b_rules, prize_at] = String.split(rules, "\n")
+
+    [ax, ay] = parse_rule(a_rules, ~r/X\+(\d+), Y\+(\d+)$/)
+    [bx, by] = parse_rule(b_rules, ~r/X\+(\d+), Y\+(\d+)$/)
+    [px, py] = parse_rule(prize_at, ~r/X=(\d+), Y=(\d+)$/)
+
+    %{a: {ax, ay}, b: {bx, by}, goal: {px, py}}
+  end
+
+  defp parse_rule(rules, regex),
+    do: Regex.run(regex, rules, capture: :all_but_first) |> Enum.map(&String.to_integer/1)
+end
+
+Day13Shared.parse(input)
+```
+
+## Part 1
+
+```elixir
+defmodule Day13Part1 do
+  def process(machines) do
+    Enum.map(machines, fn %{a: {axd, ayd}, b: {bxd, byd}, goal: {gx, gy}} ->
+      Enum.reduce(1..100, [], fn step_a, winning_combinations ->
+        {ax, ay} = {axd * step_a, ayd * step_a}
+
+        steps_b =
+          1..100
+          |> Enum.map(fn step_b -> {step_b, bxd * step_b, byd * step_b} end)
+          |> Enum.filter(fn {_, bx, by} -> ax + bx == gx and ay + by == gy end)
+          |> Enum.map(&elem(&1, 0))
+
+        if steps_b == [] do
+          winning_combinations
+        else
+          [{step_a, hd(steps_b)}]
+        end
+      end)
+    end)
+    |> List.flatten()
+    |> Enum.reduce(0, fn {a_pushes, b_pushes}, tokens_spent ->
+      tokens_spent + (a_pushes * 3 + b_pushes * 1)
+    end)
+  end
+end
+
+input |> Day13Shared.parse() |> Day13Part1.process()
+
+# 31065 is the right answer
+```
+
+## Part 2
+
+```elixir
+defmodule EquationSolver do
+  @doc """
+  Solves a system of linear equations using matrix operations.
+
+  ## Parameters
+  - matrix_a: Coefficient matrix
+  - matrix_b: Constant terms matrix
+
+  ## Returns
+  A tuple with the solutions for variables A and B
+  """
+  def solve_linear_system(matrix_a, matrix_b) do
+    # Convert matrices to lists of lists for easier manipulation
+    a_rows = Enum.map(matrix_a, &Enum.map(&1, fn x -> x end))
+    b_rows = Enum.map(matrix_b, fn [x] -> x end)
+
+    # Calculate determinant of the coefficient matrix
+    det_a = calculate_determinant(a_rows)
+
+    # Calculate determinants for each variable
+    solutions =
+      a_rows
+      |> Enum.with_index()
+      |> Enum.map(fn {_, index} ->
+        replace_column(a_rows, b_rows, index)
+        |> calculate_determinant()
+        |> Kernel./(det_a)
+      end)
+
+    # Return the solutions as a tuple
+    List.to_tuple(solutions)
+  end
+
+  @doc """
+  Calculates the determinant of a 2x2 matrix.
+
+  ## Parameters
+  - matrix: 2x2 matrix represented as a list of lists
+
+  ## Returns
+  The determinant of the matrix
+  """
+  defp calculate_determinant([[a, b], [c, d]]) do
+    a * d - b * c
+  end
+
+  @doc """
+  Replaces a column in the matrix with the constant terms.
+
+  ## Parameters
+  - matrix: Original coefficient matrix
+  - constants: Constant terms
+  - column_index: Index of the column to replace
+
+  ## Returns
+  A new matrix with the specified column replaced
+  """
+  defp replace_column(matrix, constants, column_index) do
+    matrix
+    |> Enum.with_index()
+    |> Enum.map(fn {row, row_index} ->
+      List.replace_at(row, column_index, Enum.at(constants, row_index))
+    end)
+  end
+end
+
+defmodule Day13Part2 do
+  def process(machines) do
+    machines
+    |> Enum.map(&update_the_goal/1)
+    |> Enum.map(fn %{a: {axd, ayd}, b: {bxd, byd}, goal: {gx, gy}} ->
+      IO.inspect([
+        "#{axd}·A + #{bxd}·B = #{gx}",
+        "#{ayd}·A + #{byd}·B = #{gy}"
+      ])
+
+      matrix_a = [
+        [axd, bxd],
+        [ayd, byd]
+      ]
+
+      matrix_b = [
+        [gx],
+        [gy]
+      ]
+
+      EquationSolver.solve_linear_system(matrix_a, matrix_b)
+    end)
+    |> Enum.filter(fn {a_pushes, b_pushes} ->
+      Float.round(a_pushes) == a_pushes and Float.round(b_pushes) == b_pushes
+    end)
+    |> List.flatten()
+    |> Enum.reduce(0, fn {a_pushes, b_pushes}, tokens_spent ->
+      tokens_spent + (a_pushes * 3 + b_pushes * 1)
+    end)
+  end
+
+  def update_the_goal(%{goal: {x, y}} = machine) do
+    extra = 10_000_000_000_000
+    
+    %{machine | goal: {x + extra, y + extra}}
+  end
+end
+
+input |> Day13Shared.parse() |> Day13Part2.process()
+
+# 93866170395343 is the right answer
+```

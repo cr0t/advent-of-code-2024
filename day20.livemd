@@ -1,0 +1,275 @@
+# Day 20: Race Condition
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"},
+  {:libgraph, "~> 0.16.0"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day20Shared do
+  def parse(input) do
+    input
+    |> Kino.Input.read()
+    |> String.split("\n")
+    |> Enum.with_index()
+    |> Enum.reduce(%{}, fn {line, y}, map ->
+      line
+      |> String.codepoints()
+      |> Enum.with_index()
+      |> Enum.reduce(map, fn
+        {"S", x}, map ->
+          map |> Map.put({x, y}, ".") |> Map.put(:start, {x, y})
+
+        {"E", x}, map ->
+          map |> Map.put({x, y}, ".") |> Map.put(:finish, {x, y})
+
+        {value, x}, map ->
+          map
+          |> Map.put({x, y}, value)
+          |> Map.update(:max_x, x, &max(&1, x))
+          |> Map.update(:max_y, y, &max(&1, y))
+      end)
+    end)
+  end
+
+  def build_graph(map) do
+    Enum.reduce(map, Graph.new(), fn
+      {k, v}, graph when v == "#" or k in [:start, :finish, :max_x, :max_y] ->
+        graph
+
+      {pos, "."}, graph ->
+        pos
+        |> neibs()
+        |> Enum.filter(&(Map.get(map, &1) == "."))
+        |> Enum.reduce(graph, fn accessible_neib, graph ->
+          Graph.add_edge(graph, pos, accessible_neib)
+        end)
+    end)
+  end
+
+  def neibs({x, y}), do: [{x, y - 1}, {x + 1, y}, {x, y + 1}, {x - 1, y}]
+
+  def all_surrounding_points(center, max_radius) do
+    1..max_radius
+    |> Enum.flat_map(&surrounding_points(center, &1))
+    |> Enum.uniq()
+  end
+
+  defp surrounding_points(center, radius) do
+    all_points_in_square(center, radius)
+    |> Enum.filter(&point_in_range?(center, &1, radius))
+    |> Enum.reject(&same_point?(center, &1))
+  end
+
+  defp all_points_in_square({center_x, center_y}, radius) do
+    for x <- (center_x - radius)..(center_x + radius),
+        y <- (center_y - radius)..(center_y + radius),
+        do: {x, y}
+  end
+
+  defp point_in_range?({center_x, center_y}, {x, y}, radius),
+    do: manhattan_distance({center_x, center_y}, {x, y}) <= radius
+
+  # https://en.wikipedia.org/wiki/Taxicab_geometry
+  defp manhattan_distance({x1, y1}, {x2, y2}),
+    do: abs(x1 - x2) + abs(y1 - y2)
+
+  defp same_point?({x1, y1}, {x2, y2}),
+    do: x1 == x2 and y1 == y2
+end
+
+# Day20Shared.parse(input) |> Day20Shared.build_graph()
+
+# points =
+#   Day20Shared.all_surrounding_points({5, 5}, 5)
+#   |> Enum.reject(fn {x, y} -> x < 0 or y < 0 end)
+
+# max_x = Enum.map(points, &elem(&1, 0)) |> Enum.max()
+# max_y = Enum.map(points, &elem(&1, 1)) |> Enum.max()
+
+# Enum.map(0..max_y, fn y ->
+#   Enum.map(0..max_x, fn x ->
+#     if {x, y} in points, do: "#", else: "."
+#   end)
+#   |> Enum.join("")
+# end)
+# |> Enum.join("\n")
+# |> IO.puts()
+```
+
+## Part 1
+
+```elixir
+defmodule Day20Part1Slow do
+  def process(map) do
+    graph = Day20Shared.build_graph(map)
+
+    legit_path = Graph.Pathfinding.dijkstra(graph, map[:start], map[:finish])
+    legit_length = length(legit_path)
+
+    legit_path
+    |> Enum.take(legit_length - 1)
+    |> Enum.with_index()
+    |> Task.async_stream(fn {pos, steps} ->
+      if rem(steps, 100) == 0 do
+        IO.inspect(steps, label: "step # processing")
+      end
+      
+      pos
+      |> walls_to_remove(map)
+      |> Enum.map(fn wall ->
+        alt_graph =
+          wall
+          |> wall_other_neibs(pos, map)
+          |> Enum.reduce(graph, fn new_pos, alt_graph ->
+            Graph.add_edge(alt_graph, wall, new_pos)
+          end)
+
+        alt_graph = Graph.add_edge(alt_graph, pos, wall)
+
+        Graph.dijkstra(alt_graph, pos, map[:finish]) |> length() |> Kernel.+(steps)
+      end)
+    end)
+    |> Enum.map(fn {:ok, v} -> v end)
+    |> List.flatten()
+    |> Enum.frequencies()
+    |> Enum.reduce(0, fn {k, v}, acc ->
+      if legit_length - k >= 100, do: acc + v, else: acc
+    end)
+  end
+
+  def walls_to_remove(pos, %{max_x: mx, max_y: my} = map) do
+    pos
+    |> Day20Shared.neibs()
+    |> Enum.filter(&Map.get(map, &1) == "#")
+    |> Enum.reject(fn {x, y} -> x == 0 or y == 0 or x == mx or y == my end)
+  end
+
+  def wall_other_neibs(wall, original_pos, %{max_x: mx, max_y: my} = map) do
+    wall
+    |> Day20Shared.neibs()
+    |> Enum.filter(&Map.get(map, &1) == ".")
+    |> Enum.reject(&(&1 == original_pos))
+    |> Enum.reject(fn {x, y} -> x == 0 or y == 0 or x == mx or y == my end)
+  end
+end
+
+# input |> Day20Shared.parse() |> Day20Part1Slow.process()
+# 1490 is the right answer (took ~95 seconds to calc in parallel)
+```
+
+```elixir
+defmodule Day20Part1 do
+  import Day20Shared, only: [build_graph: 1, all_surrounding_points: 2]
+  
+  def process(map, max_depth \\ 2, cut_off \\ 100) do
+    graph = build_graph(map)
+
+    legit_path = Graph.Pathfinding.dijkstra(graph, map[:start], map[:finish])
+
+    dist_max = length(legit_path)
+    dist_left = legit_path |> Enum.reverse() |> Enum.with_index() |> Map.new()
+    dist_taken = legit_path |> Enum.with_index() |> Map.new()
+
+    path_lookup =
+      Map.merge(dist_left, dist_taken, fn _k, v1, v2 ->
+        %{left: v1, taken: v2}
+      end)
+
+    legit_path
+    |> Enum.take(length(legit_path) - 1)
+    |> Enum.flat_map(&cheats(&1, max_depth, path_lookup, dist_max))
+    |> Enum.frequencies()
+    |> Enum.reduce(0, fn {k, v}, acc ->
+      if dist_max - k >= cut_off, do: acc + v, else: acc
+    end)
+  end
+
+  def cheats({cx, cy} = current_pos, max_depth, path_lookup, dist_max) do
+    %{taken: taken} = Map.get(path_lookup, current_pos)
+
+    current_pos
+    |> all_surrounding_points(max_depth)
+    |> Enum.filter(&Map.get(path_lookup, &1))
+    |> Enum.filter(fn p ->
+      %{left: left} = Map.get(path_lookup, p)
+
+      left + taken < dist_max
+    end)
+    |> Enum.map(fn {x, y} = point ->
+      %{left: left} = Map.get(path_lookup, point)
+      distance_between_points = abs(cx - x) + abs(cy - y)
+
+      left + taken + distance_between_points
+    end)
+  end
+end
+
+input |> Day20Shared.parse() |> Day20Part1.process(2, 100)
+
+# 1490 is the right answer
+```
+
+## Part 2
+
+```elixir
+defmodule Day20Part2 do
+  import Day20Shared, only: [build_graph: 1, all_surrounding_points: 2]
+
+  def process(map, max_depth \\ 2, cut_off \\ 100) do
+    graph = build_graph(map)
+
+    legit_path = Graph.Pathfinding.dijkstra(graph, map[:start], map[:finish])
+
+    dist_max = length(legit_path)
+    dist_left = legit_path |> Enum.reverse() |> Enum.with_index() |> Map.new()
+    dist_taken = legit_path |> Enum.with_index() |> Map.new()
+
+    path_lookup =
+      Map.merge(dist_left, dist_taken, fn _k, v1, v2 ->
+        %{left: v1, taken: v2}
+      end)
+
+    legit_path
+    |> Enum.take(length(legit_path) - 1)
+    |> Enum.flat_map(&cheats(&1, max_depth, path_lookup, dist_max))
+    |> Enum.frequencies()
+    |> Enum.reduce(0, fn {k, v}, acc ->
+      if dist_max - k >= cut_off, do: acc + v, else: acc
+    end)
+  end
+
+  def cheats({cx, cy} = current_pos, max_depth, path_lookup, dist_max) do
+    %{taken: taken} = Map.get(path_lookup, current_pos)
+
+    current_pos
+    |> all_surrounding_points(max_depth)
+    |> Enum.filter(fn p ->
+      Map.get(path_lookup, p)
+    end)
+    |> Enum.filter(fn p ->
+      %{left: left} = Map.get(path_lookup, p)
+
+      left + taken < dist_max
+    end)
+    |> Enum.map(fn {x, y} = point ->
+      %{left: left} = Map.get(path_lookup, point)
+
+      distance_between_points = abs(cx - x) + abs(cy - y)
+
+      left + taken + distance_between_points
+    end)
+  end
+end
+
+input |> Day20Shared.parse() |> Day20Part2.process(20, 100)
+# 1011325 is the right answer
+```

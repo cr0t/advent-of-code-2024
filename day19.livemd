@@ -1,0 +1,91 @@
+# Day 19: Linen Layout
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day19Shared do
+  def parse(input) do
+    [patterns_raw, designs_raw] = input |> Kino.Input.read() |> String.split("\n\n")
+
+    patterns = String.split(patterns_raw, ", ", trim: true) # |> Enum.map(&String.split(&1, "", trim: true))
+    designs = String.split(designs_raw, "\n") # |> Enum.map(&String.split(&1, "", trim: true))
+    
+    {patterns, designs}
+  end
+end
+
+# Day19Shared.parse(input)
+```
+
+## Part 1
+
+```elixir
+defmodule Day19Part1 do
+  def process({patterns, designs}) do
+    cache = :ets.new(:cache, [:set, :private])
+
+    result =
+      Enum.reduce(designs, 0, fn design, total ->
+        total + do_count_matches(design, patterns, cache)
+      end)
+
+    :ets.delete(cache)
+
+    result
+  end
+
+  defp do_count_matches(design, patterns, cache) do
+    case :ets.lookup(cache, design) do
+      [{_, result}] ->
+        result
+
+      [] ->
+        result = calc_matches(design, patterns, cache)
+
+        :ets.insert(cache, {design, result})
+
+        result
+    end
+  end
+
+  defp calc_matches("", _patterns, _cache), do: 0
+
+  defp calc_matches(design, patterns, cache) do
+    Enum.reduce(patterns, 0, fn pattern, acc ->
+      cond do
+        design == pattern ->
+          acc + 1
+
+        String.starts_with?(design, pattern) ->
+          remaining = String.slice(design, String.length(pattern)..-1//1)
+          acc + do_count_matches(remaining, patterns, cache)
+
+        true ->
+          acc
+      end
+    end)
+  end
+end
+
+input |> Day19Shared.parse() |> Day19Part1.process()
+
+# 243 is too low
+# 244 is too low
+# 260 is the right answer
+```
+
+## Part 2
+
+```elixir
+
+```

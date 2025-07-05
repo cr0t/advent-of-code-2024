@@ -1,0 +1,146 @@
+# Day 14: Restroom Redoubt
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day14Shared do
+  def parse(input) do
+    input
+    |> Kino.Input.read()
+    |> String.split("\n")
+    |> Enum.map(fn line ->
+      [x0, y0, vx, vy] =
+        ~r/p\=(\d+),(\d+) v\=(-?\d+),(-?\d+)/
+        |> Regex.run(line, capture: :all_but_first)
+        |> Enum.map(&String.to_integer/1)
+
+      %{initial: {x0, y0}, velocity: {vx, vy}}
+    end)
+  end
+
+  def delta(initial, velocity, limit, seconds),
+    do: rem(initial + seconds * velocity + seconds * limit, limit)
+end
+
+# Day14Shared.parse(input)
+```
+
+## Part 1
+
+```elixir
+defmodule Day14Part1 do
+  import Day14Shared, only: [delta: 4]
+
+  @seconds 100
+
+  def process(robots, width, height) do
+    h_half = div(height, 2)
+    v_half = div(width, 2)
+
+    robots
+    |> Enum.map(fn %{initial: {x0, y0}, velocity: {vx, vy}} ->
+      final_position = {delta(x0, vx, width, @seconds), delta(y0, vy, height, @seconds)}
+
+      quadrant(final_position, h_half, v_half)
+    end)
+    |> Enum.reject(&(&1 == :middle))
+    |> Enum.frequencies()
+    # |> IO.inspect()
+    |> Enum.reduce(1, fn {_, n}, acc -> acc * n end)
+  end
+
+  defp quadrant({x, y}, h_half, v_half) do
+    cond do
+      x >= 0 and x <= v_half - 1 and y >= 0 and y <= h_half - 1 -> :first
+      x >= v_half + 1 and y >= 0 and y <= h_half - 1 -> :second
+      x >= 0 and x <= v_half - 1 and y >= h_half + 1 -> :third
+      x >= v_half + 1 and y >= h_half + 1 -> :fourth
+      true -> :middle
+    end
+  end
+end
+
+input
+|> Day14Shared.parse()
+# |> Day14Part1.process(11, 7)
+|> Day14Part1.process(101, 103)
+
+# 217183590 is too high
+# 214109808 is the right answer
+```
+
+## Part 2
+
+```elixir
+defmodule Day14Part2 do
+  import Day14Shared, only: [delta: 4]
+
+  def process(robots, up_to_seconds, width, height) do
+    # The main assumption was is that tree should look like a funnel with robots on its edge,
+    # so we were looking for such a pattern in the "printed" map.
+    #
+    # Actually, tree was found with this original regex (with a huge amount of luck), so leaving
+    # it here for historical purposes:
+    #
+    # ex_mas_tree =
+    #   Regex.compile!(
+    #     "R.{0,}\n.{0,}R.{1}R.{0,}\n.{0,}R.{3}R.{0,}\n.{0,}R\.{5}R.{0,}\n.{0,}R\.{7}R.{0,}\n.{0,}R\.{9}R.{0,}\n.{0,}R\.{11}R.{0,}\n.{0,}R\.{13}R.{0,}\n.{0,}R\.{15}R.{0,}\n.{0,}R\.{17}R.{0,}\n.{0,}R\.{19}R.{0,}\n"
+    #   )
+    #
+    # With the next regex we can find the tree much faster, and it's an only one!
+    ex_mas_tree =
+      Regex.compile!(
+        "R.{0,}\n.{0,}RRR.{0,}\n.{0,}RRRRR.{0,}\n.{0,}RRRRRRR.{0,}\n.{0,}RRRRRRRRR.{0,}\n"
+      )
+
+    Stream.map(0..up_to_seconds, fn second ->
+      picture =
+        robots
+        |> Enum.reduce(MapSet.new(), fn %{initial: {x0, y0}, velocity: {vx, vy}}, roboset ->
+          {x, y} = {delta(x0, vx, width, second), delta(y0, vy, height, second)}
+
+          MapSet.put(roboset, {x, y})
+        end)
+        |> print(width, height)
+
+      {second, picture}
+    end)
+    |> Stream.filter(fn {_, picture} -> String.match?(picture, ex_mas_tree) end)
+    |> Enum.map(fn {second, picture} -> "Second: #{second}\n\n" <> picture end)
+    |> Enum.join("\n\n\n\n")
+    |> Kino.Text.new()
+    
+    # ^ it took some extra time and manual search through the hundred of "printed" maps
+    # to find how exactly the Xmas tree should look like... That's why we're leaving the
+    # traces of the "thought process" in the code, otherwise, it could be simplified to
+    # just right away filtering
+  end
+
+  defp print(roboset, width, height) do
+    Enum.map(0..height, fn y ->
+      Enum.map(0..width, fn x ->
+        if MapSet.member?(roboset, {x, y}), do: "R", else: "."
+      end)
+      |> Enum.join("")
+    end)
+    |> Enum.join("\n")
+  end
+end
+
+input
+|> Day14Shared.parse()
+|> Day14Part2.process(8000, 101, 103)
+
+# 8000 is too high
+# 7687 is the right answer
+```

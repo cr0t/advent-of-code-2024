@@ -1,0 +1,210 @@
+# Day 17: Chronospatial Computer
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day17Shared do
+  def parse(input) do
+    [registers_raw, program_raw] =
+      input
+      |> Kino.Input.read()
+      |> String.split("\n\n")
+
+    registers =
+      registers_raw
+      |> String.split("\n")
+      |> Enum.map(&Regex.run(~r/\d+$/, &1))
+      |> Enum.map(fn [v] -> String.to_integer(v) end)
+      |> List.to_tuple()
+
+    program =
+      Regex.scan(~r/(\d+)/, program_raw, capture: :all_but_first)
+      |> Enum.map(fn [o] -> String.to_integer(o) end)
+      |> List.to_tuple()
+
+    {registers, program}
+  end
+end
+
+# Day17Shared.parse(input)
+```
+
+```elixir
+
+```
+
+## Part 1
+
+```elixir
+defmodule Computer do
+  defmodule State do
+    # p is for pointer (instruction pointer)
+    # o is for out (output)
+    defstruct a: nil, b: nil, c: nil, p: nil, o: []
+  end
+
+  import Bitwise
+
+  @commands %{
+    0 => :adv,
+    1 => :bxl,
+    2 => :bst,
+    3 => :jnz,
+    4 => :bxc,
+    5 => :out,
+    6 => :bdv,
+    7 => :cdv
+  }
+
+  def debug(state, op, operand) do
+    IO.inspect({state, op, operand}, label: "debug")
+    :timer.sleep(100)
+  end
+
+  def start(registers, program) do
+    state = %State{
+      a: elem(registers, 0),
+      b: elem(registers, 1),
+      c: elem(registers, 2),
+      p: 0,
+      o: []
+    }
+
+    run(state, program, tuple_size(program))
+  end
+
+  defp run(%{p: pointer, o: out}, _, p_len) when pointer + 1 >= p_len, do: {:halt, out}
+
+  defp run(%{p: pointer} = state, program, p_length) do
+    command = @commands[elem(program, pointer)]
+    operand = elem(program, pointer + 1)
+
+    # debug(state, command, operand)
+
+    new_state = exec(state, command, operand)
+
+    run(%{new_state | p: new_state.p + 2}, program, p_length)
+  end
+
+  def exec(state, :adv, operand), do: %{state | a: div(state.a, 2 ** combo(state, operand))}
+  def exec(state, :bxl, operand), do: %{state | b: bxor(state.b, operand)}
+  def exec(state, :bst, operand), do: %{state | b: rem(combo(state, operand), 8)}
+
+  def exec(state, :jnz, operand) do
+    if state.a == 0 do
+      state
+    else
+      # later we will increase it, this hack makes it as "untouched"
+      %{state | p: operand - 2}
+    end
+  end
+
+  def exec(state, :bxc, _operand), do: %{state | b: bxor(state.b, state.c)}
+  def exec(state, :out, operand), do: %{state | o: [rem(combo(state, operand), 8) | state.o]}
+  def exec(state, :bdv, operand), do: %{state | b: div(state.a, 2 ** combo(state, operand))}
+  def exec(state, :cdv, operand), do: %{state | c: div(state.a, 2 ** combo(state, operand))}
+
+  defp combo(state, operand) do
+    case operand do
+      o when o >= 0 and o <= 3 -> o
+      4 -> state.a
+      5 -> state.b
+      6 -> state.c
+    end
+  end
+end
+
+defmodule Day17Part1 do
+  def process({registers, program}) do
+    Computer.start(registers, program)
+    |> elem(1)
+    |> Enum.reverse()
+    |> Enum.join(",")
+  end
+end
+
+# Register A: 729
+# Register B: 0
+# Register C: 0
+#
+# Program: 0,1,5,4,3,0
+
+input |> Day17Shared.parse() |> Day17Part1.process()
+
+# 1_000_000 -> ~5.7-6.5s with a Map
+# 1_000_000 -> ~4.5-4.9s with a Tuple
+
+# 234757307 is not the right answer
+# 2,3,4,7,5,7,3,0,7 is the right answer!
+```
+
+## Part 2
+
+```elixir
+defmodule Day17Part2 do
+  @doc """
+  The idea of the solution was partially taken from my friend's hints, partially from this
+  Reddit post:
+
+  https://www.reddit.com/r/adventofcode/comments/1hgo81r/2024_day_17_genuinely_enjoyed_this/
+
+  WE CANNOT SOLVE THIS TASK USING DUMB BRUTE-FORCE!
+
+  There is a few possible bits of initial value for the A register that affect output, we can
+  iterate over a few to find the tail of the program, when we first time see the out we need
+  to match to, we can start looking for the next output number (but first, we need to multiply
+  the previous input by 8).
+
+  Eventually, we will find all the numbers that give us the desired output.
+
+  Check this manual session for the sample program:
+
+      iex> Computer.start({24, 0, 0}, {0,3,5,4,3,0})     # 24 * 8    = 224
+      {:halt, [0, 3]}
+      iex> Computer.start({224, 0, 0}, {0,3,5,4,3,0})    # 224 * 8   = 1792
+      {:halt, [0, 3, 4]}
+      iex> Computer.start({1832, 0, 0}, {0,3,5,4,3,0})   # 1832 * 8  = 14656
+      {:halt, [0, 3, 4, 5]}
+      iex> Computer.start({14680, 0, 0}, {0,3,5,4,3,0})  # 14680 * 8 = 117440
+      {:halt, [0, 3, 4, 5, 3]}
+      iex> Computer.start({117440, 0, 0}, {0,3,5,4,3,0})
+      {:halt, [0, 3, 4, 5, 3, 0]}
+  """
+  def process({_registers, program}) do
+    {compare_to, left_to_match} =
+      program
+      |> Tuple.to_list()
+      |> Enum.reverse()
+      |> Enum.split(2)
+
+    in_leaps(left_to_match, compare_to, program, 0)
+  end
+
+  def in_leaps([], to_match, program, a), do: next(to_match, program, a)
+
+  def in_leaps([next | tail], to_match, program, a),
+    do: in_leaps(tail, to_match ++ [next], program, next(to_match, program, a) * 8)
+
+  def next(output, program, a) do
+    case Computer.start({a, 0, 0}, program) do
+      {:halt, ^output} -> a
+      _ -> next(output, program, a + 1)
+    end
+  end
+end
+
+input |> Day17Shared.parse() |> Day17Part2.process()
+
+# 190384609508360 is too low
+# 190384609508367 is the right answer
+```

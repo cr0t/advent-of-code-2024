@@ -1,0 +1,332 @@
+# Day 15: Warehouse Woes
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Input
+
+```elixir
+input = Kino.Input.textarea("Please, paste your input:")
+```
+
+```elixir
+defmodule Day15Shared do
+  def parse(input) do
+    [warehouse_raw, moves_raw] = Kino.Input.read(input) |> String.split("\n\n")
+
+    moves =
+      moves_raw
+      |> String.replace("\n", "")
+      |> String.codepoints()
+      |> Enum.map(fn
+        "^" -> :up
+        ">" -> :right
+        "v" -> :down
+        "<" -> :left
+      end)
+
+    {warehouse_raw, moves}
+  end
+
+  def to_string(%{max_x: mx, max_y: my} = warehouse, robot_position, direction) do
+    direction_char =
+      case direction do
+        :up -> "^"
+        :right -> ">"
+        :down -> "v"
+        :left -> "<"
+      end
+
+    Enum.map(0..my, fn y ->
+      Enum.map(0..mx, fn x ->
+        if {x, y} == robot_position do
+          direction_char
+        else
+          Map.get(warehouse, {x, y})
+        end
+      end)
+      |> Enum.join("")
+    end)
+    |> Enum.join("\n")
+  end
+end
+
+# Day15Shared.parse(input)
+```
+
+## Part 1
+
+```elixir
+defmodule Day15Part1 do
+  def process({warehouse_raw, moves}) do
+    warehouse = build_warehouse_map(warehouse_raw)
+    
+    %{start: start_pos, max_x: mx, max_y: my} = warehouse
+
+    moves
+    |> move(start_pos, mx, my, warehouse)
+    |> Enum.filter(fn {_, v} -> v == "O" end)
+    |> Enum.reduce(0, fn {{x, y}, _}, acc ->
+      acc + (x + 100 * y)
+    end)
+  end
+
+  defp build_warehouse_map(warehouse_raw) do
+      warehouse_raw
+      |> String.split("\n")
+      |> Enum.with_index()
+      |> Enum.reduce(%{}, fn {line, y}, map ->
+        line
+        |> String.codepoints()
+        |> Enum.with_index()
+        |> Enum.reduce(map, fn {value, x}, map ->
+          case value do
+            v when v in ~w[# . O] -> Map.put(map, {x, y}, value)
+            "@" -> map |> Map.put({x, y}, ".") |> Map.put(:start, {x, y})
+          end
+          |> Map.update(:max_x, x, &max(&1, x))
+          |> Map.update(:max_y, y, &max(&1, y))
+        end)
+      end)
+  end
+
+  def move([], _, _, _, warehouse), do: warehouse
+
+  def move([direction | next_moves], pos, mx, my, warehouse) do
+    {next_warehouse, next_pos} =
+      to_check(pos, direction, mx, my)
+      |> Enum.map(&{&1, Map.get(warehouse, &1)})
+      |> shift([])
+      |> then(fn
+        {:wall, _} ->
+          {warehouse, pos}
+
+        {:move, to_be_moved} ->
+          new_warehouse =
+            to_be_moved
+            |> Enum.map(&elem(&1, 0))
+            |> Enum.reduce(warehouse, fn box_pos, warehouse ->
+              new_box_pos = shift_to(box_pos, direction)
+
+              warehouse
+              |> Map.put(box_pos, ".")
+              |> Map.put(new_box_pos, "O")
+            end)
+
+          {new_warehouse, shift_to(pos, direction)}
+      end)
+
+    move(next_moves, next_pos, mx, my, next_warehouse)
+  end
+
+  defp to_check({x0, y0}, :up, _mx, _my), do: Enum.map((y0 - 1)..1, fn y -> {x0, y} end)
+  defp to_check({x0, y0}, :right, mx, _my), do: Enum.map((x0 + 1)..(mx - 1), fn x -> {x, y0} end)
+  defp to_check({x0, y0}, :down, _mx, my), do: Enum.map((y0 + 1)..(my - 1), fn y -> {x0, y} end)
+  defp to_check({x0, y0}, :left, _mx, _my), do: Enum.map((x0 - 1)..1, fn x -> {x, y0} end)
+
+  def shift([], _), do: {:wall, []}
+  def shift([{_, "#"} | _], to_be_moved), do: {:wall, to_be_moved}
+  def shift([{_, "."} | _], to_be_moved), do: {:move, to_be_moved}
+  def shift([{_, "O"} = to_move | next], to_be_moved), do: shift(next, [to_move | to_be_moved])
+
+  def shift_to({x, y}, :up), do: {x, y - 1}
+  def shift_to({x, y}, :right), do: {x + 1, y}
+  def shift_to({x, y}, :down), do: {x, y + 1}
+  def shift_to({x, y}, :left), do: {x - 1, y}
+end
+
+input |> Day15Shared.parse() |> Day15Part1.process()
+
+# 1437174 is the right answer
+```
+
+## Part 2
+
+```elixir
+defmodule Day15Part2 do
+  import Day15Shared, only: [to_string: 3]
+
+  def process({warehouse_raw, moves}) do
+    warehouse = build_warehouse_map(warehouse_raw)
+
+    %{start: start_pos, max_x: mx, max_y: my} = warehouse
+
+    moves
+    |> move(start_pos, mx, my, warehouse, 0)
+    |> Enum.filter(fn {_, v} -> v == "[" end)
+    |> Enum.reduce(0, fn {{x, y}, _}, acc ->
+      acc + (x + 100 * y)
+    end)
+
+    # debug(wh, {0, 0}, :up, "LAST")
+  end
+
+  defp build_warehouse_map(warehouse_raw) do
+    warehouse_raw
+    |> String.split("\n")
+    |> Enum.with_index()
+    |> Enum.reduce(%{}, fn {line, y}, map ->
+      line
+      |> String.codepoints()
+      |> Enum.with_index()
+      |> Enum.reduce(map, fn {value, x}, map ->
+        # every x will become two coordinates
+        x0 = x * 2
+        x1 = x0 + 1
+
+        case value do
+          v when v in ~w[# .] -> map |> Map.put({x0, y}, value) |> Map.put({x1, y}, value)
+          "O" -> map |> Map.put({x0, y}, "[") |> Map.put({x1, y}, "]")
+          "@" -> map |> Map.put({x0, y}, ".") |> Map.put({x1, y}, ".") |> Map.put(:start, {x0, y})
+        end
+        |> Map.update(:max_x, x, &max(&1, x1))
+        |> Map.update(:max_y, y, &max(&1, y))
+      end)
+    end)
+  end
+
+  def move([], _, _, _, warehouse, _), do: warehouse
+
+  def move([direction | next_moves], pos, mx, my, warehouse, step) do
+    # debug(warehouse, pos, direction, step)
+
+    {next_warehouse, next_pos} =
+      case to_move(pos, direction, warehouse) do
+        {:wall, _} ->
+          # IO.inspect(:WALL, label: "to_move_#{direction}@#{step}: WALL")
+          {warehouse, pos}
+
+        {:move, to_be_moved} ->
+          # IO.inspect(to_be_moved, label: "to_move_#{direction}@#{step}")
+          # debug(warehouse, pos, direction, step)
+
+          new_warehouse =
+            Enum.reduce(to_be_moved, warehouse, fn field, new_warehouse ->
+              swap(new_warehouse, field, direction)
+            end)
+
+          {new_warehouse, shift_to(pos, direction)}
+      end
+
+    move(next_moves, next_pos, mx, my, next_warehouse, step + 1)
+  end
+
+  def debug(warehouse, pos, direction, _step) do
+    to_string(warehouse, pos, direction) |> IO.puts()
+
+    # IO.puts("^#{step}")
+    IO.puts("")
+  end
+
+  def to_move({x0, y0}, :up, warehouse) do
+    Enum.reduce_while((y0 - 1)..0, {[], [x0]}, fn y, {acc, x_range} ->
+      pressure = Enum.map(x_range, &Map.get(warehouse, {&1, y}))
+
+      # IO.inspect({x_range, pressure}, label: "pressure")
+
+      any_wall? = Enum.any?(pressure, &(&1 == "#"))
+      all_free? = Enum.all?(pressure, &(&1 == "."))
+
+      cond do
+        any_wall? ->
+          {:halt, {:wall, []}}
+
+        all_free? ->
+          {:halt, {:move, Enum.uniq(acc)}}
+
+        true ->
+          to_move =
+            Enum.reduce(x_range, acc, fn x, acc ->
+              case Map.get(warehouse, {x, y}) do
+                "[" -> [{x, y} | [{x + 1, y} | acc]]
+                "]" -> [{x - 1, y} | [{x, y} | acc]]
+                "." -> acc
+              end
+            end)
+
+          new_x_range =
+            to_move
+            |> Enum.filter(&(elem(&1, 1) == y))
+            |> Enum.map(&elem(&1, 0))
+
+          {:cont, {to_move, new_x_range}}
+      end
+    end)
+  end
+
+  def to_move({x0, y0}, :down, %{max_y: my} = warehouse) do
+    Enum.reduce_while((y0 + 1)..my, {[], [x0]}, fn y, {acc, x_range} ->
+      pressure = Enum.map(x_range, &Map.get(warehouse, {&1, y}))
+
+      # IO.inspect({x_range, pressure}, label: "pressure")
+
+      any_wall? = Enum.any?(pressure, &(&1 == "#"))
+      all_free? = Enum.all?(pressure, &(&1 == "."))
+
+      cond do
+        any_wall? ->
+          {:halt, {:wall, []}}
+
+        all_free? ->
+          {:halt, {:move, Enum.uniq(acc)}}
+
+        true ->
+          to_move =
+            Enum.reduce(x_range, acc, fn x, acc ->
+              case Map.get(warehouse, {x, y}) do
+                "[" -> [{x, y} | [{x + 1, y} | acc]]
+                "]" -> [{x - 1, y} | [{x, y} | acc]]
+                "." -> acc
+              end
+            end)
+
+          new_x_range =
+            to_move
+            |> Enum.filter(&(elem(&1, 1) == y))
+            |> Enum.map(&elem(&1, 0))
+
+          {:cont, {to_move, new_x_range}}
+      end
+    end)
+  end
+
+  def to_move({x0, y0}, :right, %{max_x: mx} = warehouse) do
+    Enum.reduce_while((x0 + 1)..(mx - 1), [], fn x, acc ->
+      case Map.get(warehouse, {x, y0}) do
+        "#" -> {:halt, {:wall, []}}
+        "." -> {:halt, {:move, acc}}
+        _ -> {:cont, [{x, y0} | acc]}
+      end
+    end)
+  end
+
+  def to_move({x0, y0}, :left, warehouse) do
+    Enum.reduce_while((x0 - 1)..1, [], fn x, acc ->
+      case Map.get(warehouse, {x, y0}) do
+        "#" -> {:halt, {:wall, []}}
+        "." -> {:halt, {:move, acc}}
+        _ -> {:cont, [{x, y0} | acc]}
+      end
+    end)
+  end
+
+  def swap(warehouse, pos, direction) do
+    field = Map.get(warehouse, pos)
+    new_pos = shift_to(pos, direction)
+
+    warehouse |> Map.put(pos, ".") |> Map.put(new_pos, field)
+  end
+
+  def shift_to({x, y}, :up), do: {x, y - 1}
+  def shift_to({x, y}, :right), do: {x + 1, y}
+  def shift_to({x, y}, :down), do: {x, y + 1}
+  def shift_to({x, y}, :left), do: {x - 1, y}
+end
+
+input |> Day15Shared.parse() |> Day15Part2.process()
+
+# 1437468 is the right answer
+```
